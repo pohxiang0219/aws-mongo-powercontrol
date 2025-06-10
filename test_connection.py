@@ -22,7 +22,7 @@ def test_aws_connection():
         identity = sts_client.get_caller_identity()
         print(f"   ✅ Account ID: {identity.get('Account')}")
         print(f"   ✅ User ARN: {identity.get('Arn')}")
-        print(f"   ✅ Current Region: {session.region_name or 'us-east-1'}")
+        print(f"   ✅ Current Region: {session.region_name or 'ap-southeast-1'}")
         
         # Test 2: Basic S3 Access
         print("\n2️⃣ Testing S3 Access...")
