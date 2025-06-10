@@ -1,135 +1,225 @@
-#!/usr/bin/env python3
-import boto3
 import sys
-import os
-from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
+import time
+import boto3
+import subprocess
+import json
+from botocore.exceptions import ClientError, WaiterError
 
-def test_aws_connection():
-    """Test AWS connection for GitHub Actions"""
-    print("🔧 Testing AWS Connection for GitHub Actions\n")
+# --- Configuration ---
+AWS_PROFILE = "906835256128_AWSPowerUserAccess"
+
+WAITER_TIMEOUT_SECONDS = 900
+CHECK_INTERVAL_SECONDS = 30 
+
+# Resource Definitions
+RDS_INSTANCES = [
+    'my-staging-main-hiredly-db',
+    'my-staging-main-naikgaji-db' 
+]
+EC2_INSTANCES = ['my-staging-bastion-ec2']
+ATLAS_CLUSTERS = ['wobb-api-staging']
+
+ECS_SERVICES = [
+    {'cluster': 'my-staging-ashley-ecs-cluster', 'service': 'my-staging-ashley-worker-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-ashley-ecs-cluster', 'service': 'my-staging-ashley-backend-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-hiredly-ecs-cluster', 'service': 'my-staging-hiredly-be-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-hiredly-ecs-cluster', 'service': 'my-staging-hiredly-urgent-worker-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-hiredly-ecs-cluster', 'service': 'my-staging-hiredly-worker-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-naikgaji-ecs-cluster', 'service': 'my-staging-naikgaji-be-ecs-service', 'count': 1},
+    {'cluster': 'my-staging-naikgaji-ecs-cluster', 'service': 'my-staging-naikgaji-worker-ecs-service', 'count': 1},
+]
+
+# --- Boto3 Clients ---
+# We define them once to be reused.
+session = boto3.Session(profile_name=AWS_PROFILE)
+rds_client = session.client('rds')
+ec2_client = session.client('ec2')
+ecs_client = session.client('ecs')
+
+# --- Helper Functions ---
+
+def wait_for_atlas_cluster_state(cluster_name, target_state):
+    """Polls a MongoDB Atlas cluster until it reaches the target state (e.g., 'PAUSED', 'IDLE')."""
+    print(f"Waiting for Atlas cluster '{cluster_name}' to reach state '{target_state}'...")
+    start_time = time.time()
+    while time.time() - start_time < WAITER_TIMEOUT_SECONDS:
+        try:
+            command = ["atlas", "clusters", "describe", cluster_name, "--output", "json"]
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            cluster_info = json.loads(result.stdout)
+            
+            state = cluster_info.get('stateName')
+            print(f"  -> Status check for Atlas cluster '{cluster_name}': {state}")
+
+            if state == target_state:
+                print(f"Successful! Atlas cluster '{cluster_name}' is now {target_state}.")
+                return True
+        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            print(f"  -> Error checking Atlas cluster '{cluster_name}': {e}")
+            return False
+
+        time.sleep(CHECK_INTERVAL_SECONDS)
+
+    print(f"Timeout: Timed out waiting for Atlas cluster '{cluster_name}' to become {target_state}.")
+    return False
+
+# --- Main Logic: Startup Sequence ---
+
+def startup_sequence():
+    """Starts all resources in the correct order and verifies each step."""
+    print("\n--- Step 1: Starting Databases (RDS & Atlas) ---")
     
-    try:
-        # For GitHub Actions, use default credentials (no profile needed)
-        # AWS credentials should be set via environment variables:
-        # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
-        
-        print("📋 Creating AWS session...")
-        session = boto3.Session()
-        
-        # Test 1: Check AWS Identity
-        print("\n1️⃣ Testing AWS Identity (STS)...")
-        sts_client = session.client('sts')
-        identity = sts_client.get_caller_identity()
-        print(f"   ✅ Account ID: {identity.get('Account')}")
-        print(f"   ✅ User ARN: {identity.get('Arn')}")
-        print(f"   ✅ Current Region: {session.region_name or 'us-east-1'}")
-        
-        # Test 2: Basic S3 Access
-        print("\n2️⃣ Testing S3 Access...")
-        s3_client = session.client('s3')
-        buckets = s3_client.list_buckets()
-        bucket_count = len(buckets['Buckets'])
-        print(f"   ✅ S3 accessible - Found {bucket_count} buckets")
-        
-        # Test 3: ECS Access
-        print("\n3️⃣ Testing ECS Access...")
-        ecs_client = session.client('ecs')
-        clusters = ecs_client.list_clusters()
-        cluster_count = len(clusters['clusterArns'])
-        print(f"   ✅ ECS accessible - Found {cluster_count} clusters")
-        
-        # Test 4: EC2 Access
-        print("\n4️⃣ Testing EC2 Access...")
-        ec2_client = session.client('ec2')
-        instances = ec2_client.describe_instances()
-        instance_count = sum(len(reservation['Instances']) for reservation in instances['Reservations'])
-        print(f"   ✅ EC2 accessible - Found {instance_count} instances")
-        
-        # Test 5: RDS Access
-        print("\n5️⃣ Testing RDS Access...")
-        rds_client = session.client('rds')
-        databases = rds_client.describe_db_instances()
-        db_count = len(databases['DBInstances'])
-        print(f"   ✅ RDS accessible - Found {db_count} databases")
-        
-        print("\n🎉 All AWS connection tests PASSED!")
-        print("✅ GitHub Actions can successfully connect to AWS")
-        return True
-        
-    except NoCredentialsError:
-        print("❌ Error: No AWS credentials found")
-        print("💡 In GitHub Actions, set these secrets:")
-        print("   - AWS_ACCESS_KEY_ID")
-        print("   - AWS_SECRET_ACCESS_KEY")
-        print("   - AWS_SESSION_TOKEN (if using temporary credentials)")
-        return False
-        
-    except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'UnauthorizedOperation':
-            print("❌ Error: Insufficient permissions")
-            print("💡 Check IAM permissions for the AWS credentials")
-        elif error_code == 'AccessDenied':
-            print("❌ Error: Access denied")
-            print("💡 Verify the AWS credentials have the required permissions")
-        else:
-            print(f"❌ AWS Client Error: {e}")
-        return False
-        
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        return False
-
-
-def test_atlas_cli():
-    """Test MongoDB Atlas CLI availability"""
-    print("\n🍃 Testing MongoDB Atlas CLI...")
+    # Start RDS Instances
+    for db_id in RDS_INSTANCES:
+        try:
+            print(f"Starting RDS instance '{db_id}'...")
+            rds_client.start_db_instance(DBInstanceIdentifier=db_id)
+        except ClientError as e:
+            if "InvalidDBInstanceState" in str(e):
+                print(f"  -> Note: RDS instance '{db_id}' is already running or not in a stoppable state.")
+            else:
+                print(f"Error starting RDS instance '{db_id}': {e}")
+                return False
     
+    # Resume Atlas Cluster
+    for cluster in ATLAS_CLUSTERS:
+        print(f"Resuming Atlas cluster '{cluster}'...")
+        # The 'atlas clusters resume' command is now 'atlas clusters start'
+        subprocess.run(["atlas", "clusters", "start", cluster], check=True)
+
+    # Verify Databases are available
+    print("\n--- Verifying Database Availability ---")
+    rds_waiter = rds_client.get_waiter('db_instance_available')
+    for db_id in RDS_INSTANCES:
+        try:
+            print(f"Waiting for RDS instance '{db_id}' to become available...")
+            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 30, 'MaxAttempts': 30})
+            print(f"Success: RDS instance '{db_id}' is available.")
+        except WaiterError as e:
+            print(f"Timeout or error waiting for RDS instance '{db_id}': {e}")
+            return False
+
+    for cluster in ATLAS_CLUSTERS:
+        if not wait_for_atlas_cluster_state(cluster, 'IDLE'):
+            return False
+
+    print("\n--- Step 2: Starting EC2 Bastion Host ---")
     try:
-        import subprocess
-        result = subprocess.run(
-            ["atlas", "--version"], 
-            capture_output=True, 
-            text=True, 
-            timeout=10
-        )
-        
-        if result.returncode == 0:
-            version = result.stdout.strip()
-            print(f"   ✅ Atlas CLI available: {version}")
-            return True
-        else:
-            print("   ❌ Atlas CLI command failed")
+        print(f"Starting EC2 instances: {EC2_INSTANCES}...")
+        ec2_client.start_instances(InstanceIds=EC2_INSTANCES)
+        ec2_waiter = ec2_client.get_waiter('instance_running')
+        print("Waiting for EC2 instances to enter 'running' state...")
+        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 15, 'MaxAttempts': 40})
+        print("Success: All specified EC2 instances are running.")
+    except (ClientError, WaiterError) as e:
+        print(f"Error starting or waiting for EC2 instances: {e}")
+        return False
+    
+    print("\n--- Step 3: Scaling Up ECS Services ---")
+    ecs_waiter = ecs_client.get_waiter('services_stable')
+    for s in ECS_SERVICES:
+        try:
+            print(f"Updating service '{s['service']}' in cluster '{s['cluster']}' to desired count {s['count']}...")
+            ecs_client.update_service(
+                cluster=s['cluster'],
+                service=s['service'],
+                desiredCount=s['count']
+            )
+            ecs_waiter.wait(
+                cluster=s['cluster'],
+                services=[s['service']],
+                WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
+            )
+            print(f"Success: Service '{s['service']}' is stable with {s['count']} running tasks.")
+        except (ClientError, WaiterError) as e:
+            print(f"Error updating or waiting for service '{s['service']}': {e}")
             return False
             
-    except FileNotFoundError:
-        print("   ❌ Atlas CLI not found")
-        print("   💡 Install with: curl -fsSL https://www.mongodb.com/try/download/atlascli | sh")
+    return True
+
+
+# --- Main Logic: Shutdown Sequence ---
+def shutdown_sequence():
+    """Stops all resources in reverse order and verifies each step."""
+    print("\n--- Step 1: Scaling Down ECS Services ---")
+    ecs_waiter = ecs_client.get_waiter('services_stable')
+    for s in ECS_SERVICES:
+        try:
+            print(f"Updating service '{s['service']}' in cluster '{s['cluster']}' to desired count 0...")
+            ecs_client.update_service(
+                cluster=s['cluster'],
+                service=s['service'],
+                desiredCount=0
+            )
+            # Wait for the service to stabilize with 0 tasks
+            ecs_waiter.wait(
+                cluster=s['cluster'],
+                services=[s['service']],
+                WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
+            )
+            print(f"Success: Service '{s['service']}' has scaled down to 0.")
+        except (ClientError, WaiterError) as e:
+            print(f"Error scaling down service '{s['service']}': {e}")
+            return False
+
+    print("\n--- Step 2: Stopping EC2 Bastion Host ---")
+    try:
+        print(f"Stopping EC2 instances: {EC2_INSTANCES}...")
+        ec2_client.stop_instances(InstanceIds=EC2_INSTANCES)
+        ec2_waiter = ec2_client.get_waiter('instance_stopped')
+        print("Waiting for EC2 instances to enter 'stopped' state...")
+        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 15, 'MaxAttempts': 40})
+        print("Success: All specified EC2 instances are stopped.")
+    except (ClientError, WaiterError) as e:
+        print(f"Error stopping or waiting for EC2 instances: {e}")
         return False
         
-    except Exception as e:
-        print(f"   ❌ Error testing Atlas CLI: {e}")
-        return False
+    print("\n--- Step 3: Stopping Databases (RDS & Atlas) ---")
+    # Stop RDS Instances
+    rds_waiter = rds_client.get_waiter('db_instance_stopped')
+    for db_id in RDS_INSTANCES:
+        try:
+            print(f"Stopping RDS instance '{db_id}'...")
+            rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
+            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 30, 'MaxAttempts': 30})
+            print(f"Success: RDS instance '{db_id}' is stopped.")
+        except (ClientError, WaiterError) as e:
+            if "InvalidDBInstanceState" in str(e):
+                 print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
+            else:
+                print(f"Error stopping RDS instance '{db_id}': {e}")
+                return False
+
+    # Pause Atlas Cluster
+    for cluster in ATLAS_CLUSTERS:
+        print(f"Pausing Atlas cluster '{cluster}'...")
+        subprocess.run(["atlas", "clusters", "pause", cluster, "--force"], check=True)
+        if not wait_for_atlas_cluster_state(cluster, 'PAUSED'):
+            return False
+            
+    return True
 
 
+# --- Script Entry Point ---
 if __name__ == "__main__":
-    print("🚀 GitHub Actions AWS Connection Test\n")
-    print("="*50)
+    if len(sys.argv) != 2 or sys.argv[1] not in ['start', 'stop']:
+        print("Usage: python control_environment.py [start|stop]")
+        sys.exit(1)
     
-    # Test AWS connection
-    aws_success = test_aws_connection()
+    action = sys.argv[1]
     
-    # Test Atlas CLI (optional)
-    atlas_success = test_atlas_cli()
+    # The Boto3 session handles the profile, no need for os.environ
+    
+    if action == 'start':
+        print("Initiating staging environment startup!")
+        success = startup_sequence()
+    else:
+        print("Initiating staging environment shutdown!")
+        success = shutdown_sequence()
     
     print("\n" + "="*50)
-    print("📊 Test Results:")
-    print(f"   AWS Connection: {'✅ PASS' if aws_success else '❌ FAIL'}")
-    print(f"   Atlas CLI: {'✅ PASS' if atlas_success else '❌ FAIL'}")
-    
-    if aws_success:
-        print("\n🎉 Ready for GitHub Actions deployment!")
-        sys.exit(0)
+    if success:
+        print(f"Sequence '{action.upper()}' completed successfully!")
     else:
-        print("\n💥 Fix AWS connection before running in GitHub Actions")
+        print(f"Sequence '{action.upper()}' FAILED. Please review logs above.")
         sys.exit(1)
