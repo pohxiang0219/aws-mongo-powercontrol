@@ -44,6 +44,10 @@ jobs:
         run: |
           sudo dpkg -i mongodb-atlas-cli.deb || true
 
+      - name: Set Region for AWS
+        run: |
+          aws configure set region ap-southeast-1
+      
       - name: Verify tools
         run: |
           aws --version
