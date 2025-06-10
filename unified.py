@@ -5,8 +5,6 @@ import subprocess
 import json
 from botocore.exceptions import ClientError, WaiterError
 
-# --- Configuration ---
-AWS_PROFILE = "906835256128_AWSPowerUserAccess"
 
 WAITER_TIMEOUT_SECONDS = 900
 CHECK_INTERVAL_SECONDS = 30 
@@ -31,7 +29,7 @@ ECS_SERVICES = [
 
 # --- Boto3 Clients ---
 # We define them once to be reused.
-session = boto3.Session(profile_name=AWS_PROFILE)
+session = boto3.Session(profile_name='AWS_PROFILE')
 rds_client = session.client('rds')
 ec2_client = session.client('ec2')
 ecs_client = session.client('ecs')
