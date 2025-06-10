@@ -34,11 +34,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Install Atlas CLI
+      - name: Install homebrew
         run: |
           # official install script for Linux
-          curl -sS https://raw.githubusercontent.com/mongodb/mongodb-atlas-cli/stable/install.sh | bash
-
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          
+      - name: Install atlascli
+        run: |
+          brew install mongodb-atlas
+          
       - name: Verify tools
         run: |
           aws --version
