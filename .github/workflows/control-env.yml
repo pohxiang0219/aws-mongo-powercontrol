@@ -1,0 +1,55 @@
+name: Control Staging Environment
+
+# You can trigger manually, on push, or on a schedule
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'start or stop'
+        required: true
+        default: 'start'
+
+jobs:
+  control-env:
+    runs-on: ubuntu-latest
+    env:
+      # These should be set in your repo’s Settings → Secrets
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:        ${{ secrets.AWS_REGION }}
+      ATLAS_PUBLIC_KEY:  ${{ secrets.ATLAS_PUBLIC_KEY }}
+      ATLAS_PRIVATE_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
+      ATLAS_PROJECT_ID:  ${{ secrets.ATLAS_PROJECT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 botocore
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Install Atlas CLI
+        run: |
+          # official install script for Linux
+          curl -sS https://raw.githubusercontent.com/mongodb/mongodb-atlas-cli/stable/install.sh | bash
+
+      - name: Verify tools
+        run: |
+          aws --version
+          atlas version
+          python --version
+
+      - name: Run control_environment.py
+        run: |
+          python control_environment.py ${{ github.event.inputs.action }}
