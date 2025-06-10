@@ -54,6 +54,10 @@ jobs:
           atlas --version
           python --version
 
-      - name: Run control_environment.py
+      - name: Run test_connection.py
         run: |
-          python unified.py 
+          python test_connection.py 
+
+      - name: Run unified.py
+        run: | 
+          python unified.py ${{ github.event.inputs.action }}
