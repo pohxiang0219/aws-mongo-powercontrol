@@ -34,11 +34,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
+      - name: Download Atlas CLI .deb
+        run: |
+          wget https://fastdl.mongodb.org/mongocli/mongodb-atlas-cli_1.41.2_linux_x86_64.deb \
+            -O mongodb-atlas-cli.deb
+
       - name: Install Atlas CLI
         run: |
-          # fetch & run the official installer
-          curl -sS https://raw.githubusercontent.com/mongodb/mongodb-atlas-cli/stable/install.sh\ | bash
-           
+          sudo dpkg -i mongodb-atlas-cli.deb || true
+
+      - name: Verify Atlas CLI
+        run: atlas version
 
       - name: Verify tools
         run: |
