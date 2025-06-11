@@ -108,7 +108,7 @@ def startup_sequence():
         print(f"Resuming Atlas cluster '{cluster}'...")
         # The 'atlas clusters resume' command is now 'atlas clusters start'
         #subprocess.run(["atlas", "clusters", "start", cluster], check=True)
-        os.system(f"atlas clusters start {cluster} --force")
+        os.system(f"atlas clusters start {cluster}")
 
     # Verify Databases are available
     print("\n--- Verifying Database Availability ---")
@@ -216,7 +216,7 @@ def shutdown_sequence():
     # Pause Atlas Cluster
     for cluster in ATLAS_CLUSTERS:
         print(f"Pausing Atlas cluster '{cluster}'...")
-        os.system(f"atlas clusters pause {cluster} --force")
+        os.system(f"atlas clusters pause {cluster}")
         if not wait_for_atlas_cluster_state(cluster, 'PAUSED'):
             return False
             
