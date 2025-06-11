@@ -58,6 +58,3 @@ jobs:
         run: |
           python test_connection.py 
 
-      - name: Run unified.py
-        run: | 
-          python unified.py ${{ github.event.inputs.action }}
