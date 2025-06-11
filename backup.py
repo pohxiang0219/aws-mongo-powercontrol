@@ -6,9 +6,12 @@ from botocore.exceptions import ClientError, WaiterError
 import os
 import concurrent.futures
 
-# Configuration
-WAITER_TIMEOUT_SECONDS = 300  # Reduced from 900 to 300 seconds (5 minutes)
-CHECK_INTERVAL_SECONDS = 15   # Reduced from 30 to 15 seconds
+
+# Map CI
+
+
+WAITER_TIMEOUT_SECONDS = 900
+CHECK_INTERVAL_SECONDS = 30 
 
 # Resource Definitions
 RDS_INSTANCES = [
@@ -29,38 +32,11 @@ ECS_SERVICES = [
 ]
 
 # --- Boto3 Clients ---
+# We define them once to be reused.
 session = boto3.Session()
 rds_client = session.client('rds')
 ec2_client = session.client('ec2')
 ecs_client = session.client('ecs')
-
-# --- Helper Functions ---
-
-def update_ecs_service(service_config, desired_count):
-    """Update a single ECS service"""
-    try:
-        print(f"Updating service '{service_config['service']}' in cluster '{service_config['cluster']}' to desired count {desired_count}...")
-        ecs_client.update_service(
-            cluster=service_config['cluster'],
-            service=service_config['service'],
-            desiredCount=desired_count
-        )
-        return True, service_config['service'], None
-    except Exception as e:
-        return False, service_config['service'], str(e)
-
-def wait_for_ecs_service(service_config):
-    """Wait for a single ECS service to stabilize"""
-    try:
-        ecs_waiter = ecs_client.get_waiter('services_stable')
-        ecs_waiter.wait(
-            cluster=service_config['cluster'],
-            services=[service_config['service']],
-            WaiterConfig={'Delay': 10, 'MaxAttempts': 20}  # 200 seconds max
-        )
-        return True, service_config['service'], None
-    except Exception as e:
-        return False, service_config['service'], str(e)
 
 # --- Main Logic: Startup Sequence ---
 
@@ -80,23 +56,24 @@ def startup_sequence():
                 print(f"Error starting RDS instance '{db_id}': {e}")
                 return False
     
-    # Resume Atlas Clusters
+    # Resume Atlas Cluster
     for cluster in ATLAS_CLUSTERS:
         print(f"Resuming Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters start {cluster}")
 
-    # Verify RDS Databases are available (with reduced timeout)
+    # Verify Databases are available
     print("\n--- Verifying Database Availability ---")
     rds_waiter = rds_client.get_waiter('db_instance_available')
     for db_id in RDS_INSTANCES:
         try:
             print(f"Waiting for RDS instance '{db_id}' to become available...")
-            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 20, 'MaxAttempts': 15})  # 5 minutes max
+            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 30, 'MaxAttempts': 30})
             print(f"Success: RDS instance '{db_id}' is available.")
         except WaiterError as e:
             print(f"Timeout or error waiting for RDS instance '{db_id}': {e}")
             return False
 
+    # Removed Atlas cluster state checking
     print("Atlas clusters started (not waiting for state verification)")
 
     print("\n--- Step 2: Starting EC2 Bastion Host ---")
@@ -105,79 +82,58 @@ def startup_sequence():
         ec2_client.start_instances(InstanceIds=EC2_INSTANCES)
         ec2_waiter = ec2_client.get_waiter('instance_running')
         print("Waiting for EC2 instances to enter 'running' state...")
-        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 10, 'MaxAttempts': 20})  # 200 seconds max
+        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 15, 'MaxAttempts': 40})
         print("Success: All specified EC2 instances are running.")
     except (ClientError, WaiterError) as e:
         print(f"Error starting or waiting for EC2 instances: {e}")
         return False
     
-    print("\n--- Step 3: Scaling Up ECS Services (Parallel) ---")
-    
-    # Start all ECS services in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all service updates
-        update_futures = {executor.submit(update_ecs_service, s, s['count']): s for s in ECS_SERVICES}
-        
-        # Wait for all updates to complete
-        for future in concurrent.futures.as_completed(update_futures):
-            success, service_name, error = future.result()
-            if success:
-                print(f"Service update initiated: {service_name}")
-            else:
-                print(f"Error updating service '{service_name}': {error}")
-                return False
-
-    # Wait for all services to stabilize in parallel
-    print("Waiting for all ECS services to stabilize...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all service waits
-        wait_futures = {executor.submit(wait_for_ecs_service, s): s for s in ECS_SERVICES}
-        
-        # Wait for all services to stabilize
-        for future in concurrent.futures.as_completed(wait_futures):
-            success, service_name, error = future.result()
-            if success:
-                print(f"Success: Service '{service_name}' is stable.")
-            else:
-                print(f"Error waiting for service '{service_name}': {error}")
-                return False
+    print("\n--- Step 3: Scaling Up ECS Services ---")
+    ecs_waiter = ecs_client.get_waiter('services_stable')
+    for s in ECS_SERVICES:
+        try:
+            print(f"Updating service '{s['service']}' in cluster '{s['cluster']}' to desired count {s['count']}...")
+            ecs_client.update_service(
+                cluster=s['cluster'],
+                service=s['service'],
+                desiredCount=s['count']
+            )
+            ecs_waiter.wait(
+                cluster=s['cluster'],
+                services=[s['service']],
+                WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
+            )
+            print(f"Success: Service '{s['service']}' is stable with {s['count']} running tasks.")
+        except (ClientError, WaiterError) as e:
+            print(f"Error updating or waiting for service '{s['service']}': {e}")
+            return False
             
     return True
 
-# --- Main Logic: Shutdown Sequence ---
 
+# --- Main Logic: Shutdown Sequence ---
 def shutdown_sequence():
     """Stops all resources in reverse order and verifies each step."""
-    print("\n--- Step 1: Scaling Down ECS Services (Parallel) ---")
-    
-    # Scale down all ECS services in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all service updates to 0
-        update_futures = {executor.submit(update_ecs_service, s, 0): s for s in ECS_SERVICES}
-        
-        # Wait for all updates to complete
-        for future in concurrent.futures.as_completed(update_futures):
-            success, service_name, error = future.result()
-            if success:
-                print(f"Service scale-down initiated: {service_name}")
-            else:
-                print(f"Error scaling down service '{service_name}': {error}")
-                return False
-
-    # Wait for all services to scale down in parallel
-    print("Waiting for all ECS services to scale down...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        # Submit all service waits
-        wait_futures = {executor.submit(wait_for_ecs_service, s): s for s in ECS_SERVICES}
-        
-        # Wait for all services to stabilize at 0
-        for future in concurrent.futures.as_completed(wait_futures):
-            success, service_name, error = future.result()
-            if success:
-                print(f"Success: Service '{service_name}' has scaled down to 0.")
-            else:
-                print(f"Error waiting for service '{service_name}': {error}")
-                return False
+    print("\n--- Step 1: Scaling Down ECS Services ---")
+    ecs_waiter = ecs_client.get_waiter('services_stable')
+    for s in ECS_SERVICES:
+        try:
+            print(f"Updating service '{s['service']}' in cluster '{s['cluster']}' to desired count 0...")
+            ecs_client.update_service(
+                cluster=s['cluster'],
+                service=s['service'],
+                desiredCount=0
+            )
+            # Wait for the service to stabilize with 0 tasks
+            ecs_waiter.wait(
+                cluster=s['cluster'],
+                services=[s['service']],
+                WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
+            )
+            print(f"Success: Service '{s['service']}' has scaled down to 0.")
+        except (ClientError, WaiterError) as e:
+            print(f"Error scaling down service '{s['service']}': {e}")
+            return False
 
     print("\n--- Step 2: Stopping EC2 Bastion Host ---")
     try:
@@ -185,47 +141,45 @@ def shutdown_sequence():
         ec2_client.stop_instances(InstanceIds=EC2_INSTANCES)
         ec2_waiter = ec2_client.get_waiter('instance_stopped')
         print("Waiting for EC2 instances to enter 'stopped' state...")
-        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 10, 'MaxAttempts': 20})  # 200 seconds max
+        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 15, 'MaxAttempts': 40})
         print("Success: All specified EC2 instances are stopped.")
     except (ClientError, WaiterError) as e:
         print(f"Error stopping or waiting for EC2 instances: {e}")
         return False
         
     print("\n--- Step 3: Stopping Databases (RDS & Atlas) ---")
-    
     # Stop RDS Instances
     rds_waiter = rds_client.get_waiter('db_instance_stopped')
     for db_id in RDS_INSTANCES:
         try:
             print(f"Stopping RDS instance '{db_id}'...")
             rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
-            print(f"Waiting for RDS instance '{db_id}' to stop...")
-            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 20, 'MaxAttempts': 15})  # 5 minutes max
+            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 30, 'MaxAttempts': 30})
             print(f"Success: RDS instance '{db_id}' is stopped.")
         except (ClientError, WaiterError) as e:
             if "InvalidDBInstanceState" in str(e):
-                print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
+                 print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
             else:
                 print(f"Error stopping RDS instance '{db_id}': {e}")
                 return False
 
-    # Pause Atlas Clusters
+    # Pause Atlas Cluster
     for cluster in ATLAS_CLUSTERS:
         print(f"Pausing Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters pause {cluster}")
+        # Removed Atlas cluster state checking
         print(f"Atlas cluster '{cluster}' pause command sent (not waiting for state verification)")
             
     return True
 
 # --- Script Entry Point ---
-
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in ['start', 'stop']:
-        print("Usage: python unified.py [start|stop]")
+        print("Usage: python control_environment.py [start|stop]")
         sys.exit(1)
     
     action = sys.argv[1]
-    start_time = time.time()
+    
     
     if action == 'start':
         print("Initiating staging environment startup!")
@@ -234,10 +188,7 @@ if __name__ == "__main__":
         print("Initiating staging environment shutdown!")
         success = shutdown_sequence()
     
-    elapsed_time = time.time() - start_time
     print("\n" + "="*50)
-    print(f"Total execution time: {elapsed_time:.1f} seconds")
-    
     if success:
         print(f"Sequence '{action.upper()}' completed successfully!")
     else:
