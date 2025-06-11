@@ -54,4 +54,4 @@ jobs:
       - name: Smoke-test Atlas auth
         shell: bash
         run: |
-          atlas clusters describe wobb-api-staging --output json
+          atlas clusters describe wobb-api --output json
