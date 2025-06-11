@@ -1,0 +1,66 @@
+name: Control Staging Environment
+
+# You can trigger manually, on push, or on a schedule
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Choose your stateee!!!'
+        required: true
+        default: 'start'
+
+jobs:
+  control-env:
+    runs-on: ubuntu-latest
+    env:
+      # These should be set in your repo’s Settings → Secrets
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION:        ${{ secrets.AWS_REGION }}
+      MONGODB_ATLAS_PUBLIC_KEY:  ${{ secrets.ATLAS_PUBLIC_KEY }}
+      MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
+      MONGODB_ATLAS_PROJECT_ID:  ${{ secrets.ATLAS_PROJECT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Download Atlas CLI .deb
+        run: |
+          wget https://fastdl.mongodb.org/mongocli/mongodb-atlas-cli_1.41.2_linux_x86_64.deb \
+            -O mongodb-atlas-cli.deb
+
+      - name: Install Atlas CLI
+        run: |
+          sudo dpkg -i mongodb-atlas-cli.deb || true
+      
+      - name: Verify tools
+        run: |
+          aws --version
+          atlas --version
+          python --version
+      
+      - name: Set aws region
+        run: |
+          aws configure set region ap-southeast-1
+          
+      - name: Configure Atlas CLI profile
+        run: |
+          atlas config init \
+            --publicApiKey ${{ secrets.ATLAS_PUBLIC_KEY }} \
+            --privateApiKey ${{ secrets.ATLAS_PRIVATE_KEY }} \
+            --projectId ${{ secrets.ATLAS_PROJECT_ID }}
+
+      - name: Smoke-test Atlas auth
+        run: |
+          atlas clusters describe wobb-api-staging --output json
