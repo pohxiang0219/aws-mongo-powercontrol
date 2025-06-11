@@ -53,13 +53,6 @@ jobs:
           aws --version
           atlas --version
           python --version
-
-      - name: Configuring atlas
-        run: |
-          atlas config init
-          ${{ secrets.ATLAS_PUBLIC_KEY }}
-          ${{ secrets.ATLAS_PRIVATE_KEY }}
-          ${{ secrets.ATLAS_PROJECT_ID }}
           
       - name: Run test_connection.py
         run: |
