@@ -54,13 +54,6 @@ jobs:
         run: |
           aws configure set region ap-southeast-1
           
-      - name: Configure Atlas CLI profile
-        run: |
-          atlas config init \
-            --publicApiKey ${{ secrets.ATLAS_PUBLIC_KEY }} \
-            --privateApiKey ${{ secrets.ATLAS_PRIVATE_KEY }} \
-            --projectId ${{ secrets.ATLAS_PROJECT_ID }}
-
       - name: Smoke-test Atlas auth
         run: |
           atlas clusters describe wobb-api-staging --output json
