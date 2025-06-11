@@ -55,6 +55,17 @@ jobs:
       - name: Run test_connection.py
         run: |
           python test_connection.py 
+      
+      - name: Configure Atlas CLI
+        env:
+          ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+          ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+        run: |
+          atlas config init <<EOF
+          $ATLAS_PUBLIC_KEY
+          $ATLAS_PRIVATE_KEY
+          EOF
+          
       - name: Run unified.py
         run: | 
           python unified.py ${{ github.event.inputs.action }}
