@@ -16,7 +16,7 @@ RDS_INSTANCES = [
     'my-staging-main-hiredly-db',
     'my-staging-main-naikgaji-db' 
 ]
-EC2_INSTANCES = "i-048cda6b4dc31f3c9"
+EC2_INSTANCES = ["i-048cda6b4dc31f3c9"]
 ATLAS_CLUSTERS = ['wobb-api-staging']
 
 ECS_SERVICES = [
