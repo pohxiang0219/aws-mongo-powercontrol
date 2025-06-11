@@ -1,7 +1,6 @@
 import sys
 import time
 import boto3
-import subprocess
 import json
 from botocore.exceptions import ClientError, WaiterError
 import os
