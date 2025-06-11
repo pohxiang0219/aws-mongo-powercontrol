@@ -29,7 +29,7 @@ ECS_SERVICES = [
 
 # --- Boto3 Clients ---
 # We define them once to be reused.
-session = boto3.Session(profile_name='Default')
+session = boto3.Session()
 rds_client = session.client('rds')
 ec2_client = session.client('ec2')
 ecs_client = session.client('ecs')
