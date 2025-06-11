@@ -45,9 +45,30 @@ def wait_for_atlas_cluster_state(cluster_name, target_state):
     start_time = time.time()
     while time.time() - start_time < WAITER_TIMEOUT_SECONDS:
         try:
-            command = ["atlas", "clusters", "describe", cluster_name, "--output", "json"]
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            cluster_info = json.loads(result.stdout)
+            command = f"atlas clusters describe {cluster_name} --output json"
+            result = os.system(command)
+            
+            if result != 0:
+                print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
+                return False
+            
+            # Since os.system doesn't capture output, we need to use a temporary file
+            # or modify the approach to get cluster status
+            temp_file = "atlas_cluster_status.json"
+            command_with_output = f"atlas clusters describe {cluster_name} --output json > {temp_file}"
+            result = os.system(command_with_output)
+            
+            if result != 0:
+                print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
+                return False
+                
+            try:
+                with open(temp_file, 'r') as f:
+                    cluster_info = json.load(f)
+                os.remove(temp_file)  # Clean up temp file
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"  -> Error reading cluster info for '{cluster_name}': {e}")
+                return False
             
             state = cluster_info.get('stateName')
             print(f"  -> Status check for Atlas cluster '{cluster_name}': {state}")
@@ -55,7 +76,7 @@ def wait_for_atlas_cluster_state(cluster_name, target_state):
             if state == target_state:
                 print(f"Successful! Atlas cluster '{cluster_name}' is now {target_state}.")
                 return True
-        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        except Exception as e:
             print(f"  -> Error checking Atlas cluster '{cluster_name}': {e}")
             return False
 
