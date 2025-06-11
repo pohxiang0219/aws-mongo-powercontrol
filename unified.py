@@ -7,8 +7,7 @@ from botocore.exceptions import ClientError, WaiterError
 import os
 
 # Map CI
-os.environ["ATLAS_PUBLIC_KEY"]  = os.getenv("MONGODB_ATLAS_PUBLIC_KEY", "")
-os.environ["ATLAS_PRIVATE_KEY"] = os.getenv("MONGODB_ATLAS_PRIVATE_KEY", "")
+
 
 WAITER_TIMEOUT_SECONDS = 900
 CHECK_INTERVAL_SECONDS = 30 
@@ -87,7 +86,8 @@ def startup_sequence():
     for cluster in ATLAS_CLUSTERS:
         print(f"Resuming Atlas cluster '{cluster}'...")
         # The 'atlas clusters resume' command is now 'atlas clusters start'
-        subprocess.run(["atlas", "clusters", "start", cluster], check=True)
+        #subprocess.run(["atlas", "clusters", "start", cluster], check=True)
+        os.system(f"atlas clusters start {cluster} --force")
 
     # Verify Databases are available
     print("\n--- Verifying Database Availability ---")
