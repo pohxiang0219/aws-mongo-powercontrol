@@ -39,10 +39,6 @@ jobs:
 
       - name: Setup AtlasCLI
         uses: mongodb/atlas-github-action@v0.2.0
-
-      - name: Use AtlasCLI
-        shell: bash
-        run: atlas --versions
       
       - name: Verify tools
         run: |
@@ -55,5 +51,6 @@ jobs:
           aws configure set region ap-southeast-1
           
       - name: Smoke-test Atlas auth
+        shell: bash
         run: |
           atlas clusters describe wobb-api-staging --output json
