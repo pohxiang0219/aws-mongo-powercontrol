@@ -18,7 +18,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION:        ${{ secrets.AWS_REGION }}
-      MONGODB_ATLAS_PUBLIC_API_KEY::  ${{ secrets.ATLAS_PUBLIC_KEY }}
+      MONGODB_ATLAS_PUBLIC_API_KEY:  ${{ secrets.ATLAS_PUBLIC_KEY }}
       MONGODB_ATLAS_PRIVATE_API_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
       MONGODB_ATLAS_PROJECT_ID:  ${{ secrets.ATLAS_PROJECT_ID }}
       MONGODB_ATLAS_ORG_ID: ${{ secrets.ATLAS_ORG_ID }}
@@ -49,7 +49,8 @@ jobs:
       - name: Set aws region
         run: |
           aws configure set region ap-southeast-1
-          
+      
+        
       - name: Smoke-test Atlas auth
         shell: bash
         run: |
