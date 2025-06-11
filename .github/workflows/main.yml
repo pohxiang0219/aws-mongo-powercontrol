@@ -1,4 +1,4 @@
-name: Control Staging Environment
+name: Testing Connection for Mongo
 
 # You can trigger manually, on push, or on a schedule
 on:
