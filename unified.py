@@ -17,7 +17,7 @@ RDS_INSTANCES = [
     'my-staging-main-hiredly-db',
     'my-staging-main-naikgaji-db' 
 ]
-EC2_INSTANCES = ['my-staging-bastion-ec2']
+EC2_INSTANCES = "i-048cda6b4dc31f3c9"
 ATLAS_CLUSTERS = ['wobb-api-staging']
 
 ECS_SERVICES = [
@@ -195,7 +195,7 @@ def shutdown_sequence():
     # Pause Atlas Cluster
     for cluster in ATLAS_CLUSTERS:
         print(f"Pausing Atlas cluster '{cluster}'...")
-        subprocess.run(["atlas", "clusters", "pause", cluster, "--force"], check=True)
+        os.system(f"atlas clusters pause {cluster} --force")
         if not wait_for_atlas_cluster_state(cluster, 'PAUSED'):
             return False
             
