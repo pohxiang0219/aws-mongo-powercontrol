@@ -36,52 +36,6 @@ rds_client = session.client('rds')
 ec2_client = session.client('ec2')
 ecs_client = session.client('ecs')
 
-# --- Helper Functions ---
-
-def wait_for_atlas_cluster_state(cluster_name, target_state):
-    """Polls a MongoDB Atlas cluster until it reaches the target state (e.g., 'PAUSED', 'IDLE')."""
-    print(f"Waiting for Atlas cluster '{cluster_name}' to reach state '{target_state}'...")
-    start_time = time.time()
-    while time.time() - start_time < WAITER_TIMEOUT_SECONDS:
-        try:
-            result = os.system(f"atlas clusters describe {cluster_name} --output")
-            
-            if result != 0:
-                print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
-                return False
-            
-            # Since os.system doesn't capture output, we need to use a temporary file
-            # or modify the approach to get cluster status
-            temp_file = "atlas_cluster_status.json"
-            result = os.system(f"atlas clusters describe {cluster_name} --output json > {temp_file}")
-            
-            if result != 0:
-                print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
-                return False
-                
-            try:
-                with open(temp_file, 'r') as f:
-                    cluster_info = json.load(f)
-                os.remove(temp_file)  # Clean up temp file
-            except (FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"  -> Error reading cluster info for '{cluster_name}': {e}")
-                return False
-            
-            state = cluster_info.get('stateName')
-            print(f"  -> Status check for Atlas cluster '{cluster_name}': {state}")
-
-            if state == target_state:
-                print(f"Successful! Atlas cluster '{cluster_name}' is now {target_state}.")
-                return True
-        except Exception as e:
-            print(f"  -> Error checking Atlas cluster '{cluster_name}': {e}")
-            return False
-
-        time.sleep(CHECK_INTERVAL_SECONDS)
-
-    print(f"Timeout: Timed out waiting for Atlas cluster '{cluster_name}' to become {target_state}.")
-    return False
-
 # --- Main Logic: Startup Sequence ---
 
 def startup_sequence():
@@ -103,8 +57,6 @@ def startup_sequence():
     # Resume Atlas Cluster
     for cluster in ATLAS_CLUSTERS:
         print(f"Resuming Atlas cluster '{cluster}'...")
-        # The 'atlas clusters resume' command is now 'atlas clusters start'
-        #subprocess.run(["atlas", "clusters", "start", cluster], check=True)
         os.system(f"atlas clusters start {cluster}")
 
     # Verify Databases are available
@@ -119,9 +71,8 @@ def startup_sequence():
             print(f"Timeout or error waiting for RDS instance '{db_id}': {e}")
             return False
 
-    for cluster in ATLAS_CLUSTERS:
-        if not wait_for_atlas_cluster_state(cluster, 'IDLE'):
-            return False
+    # Removed Atlas cluster state checking
+    print("Atlas clusters started (not waiting for state verification)")
 
     print("\n--- Step 2: Starting EC2 Bastion Host ---")
     try:
@@ -214,11 +165,10 @@ def shutdown_sequence():
     for cluster in ATLAS_CLUSTERS:
         print(f"Pausing Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters pause {cluster}")
-        if not wait_for_atlas_cluster_state(cluster, 'PAUSED'):
-            return False
+        # Removed Atlas cluster state checking
+        print(f"Atlas cluster '{cluster}' pause command sent (not waiting for state verification)")
             
     return True
-
 
 # --- Script Entry Point ---
 if __name__ == "__main__":
