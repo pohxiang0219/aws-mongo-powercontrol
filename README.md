@@ -5,10 +5,10 @@ boto3 is used to handle the AWS which is a native python SDK
 subprocess is paired with atlas CLI to execute external command-line for MongoDB
 
 
-# Usage
+# 🔧 Usage
 1. Go to Actions tab
 2. On the left hand sidebar click on Control Staging Environment
 3. Click run workflow
 4. "Start" is to upscale the ECS and start the EC2 instances and mongoDB staging cluster while "Stop" is to downscale the ECS and stop the EC2 instance and mongoDB staging cluster
 
-# Running Manually 
+# 🏠Running Manually 
