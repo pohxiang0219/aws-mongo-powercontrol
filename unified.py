@@ -45,8 +45,7 @@ def wait_for_atlas_cluster_state(cluster_name, target_state):
     start_time = time.time()
     while time.time() - start_time < WAITER_TIMEOUT_SECONDS:
         try:
-            command = f"atlas clusters describe {cluster_name} --output json"
-            result = os.system(command)
+            result = os.system(f"atlas clusters describe {cluster_name} --output")
             
             if result != 0:
                 print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
@@ -55,8 +54,7 @@ def wait_for_atlas_cluster_state(cluster_name, target_state):
             # Since os.system doesn't capture output, we need to use a temporary file
             # or modify the approach to get cluster status
             temp_file = "atlas_cluster_status.json"
-            command_with_output = f"atlas clusters describe {cluster_name} --output json > {temp_file}"
-            result = os.system(command_with_output)
+            result = os.system(f"atlas clusters describe {cluster_name} --output json > {temp_file}")
             
             if result != 0:
                 print(f"  -> Error checking Atlas cluster '{cluster_name}': Command failed with exit code {result}")
