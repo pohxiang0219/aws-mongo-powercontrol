@@ -4,7 +4,11 @@ import boto3
 import subprocess
 import json
 from botocore.exceptions import ClientError, WaiterError
+import os
 
+# Map CI
+os.environ["ATLAS_PUBLIC_KEY"]  = os.getenv("MONGODB_ATLAS_PUBLIC_KEY", "")
+os.environ["ATLAS_PRIVATE_KEY"] = os.getenv("MONGODB_ATLAS_PRIVATE_KEY", "")
 
 WAITER_TIMEOUT_SECONDS = 900
 CHECK_INTERVAL_SECONDS = 30 
