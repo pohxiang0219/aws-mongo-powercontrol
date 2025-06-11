@@ -42,7 +42,7 @@ jobs:
 
       - name: Use AtlasCLI
         shell: bash
-        run: atlas --version
+        run: atlas --versions
       
       - name: Verify tools
         run: |
