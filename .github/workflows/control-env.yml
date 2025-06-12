@@ -35,11 +35,6 @@ jobs:
       
       - name: Setup AtlasCLI
         uses: mongodb/atlas-github-action@v0.2.0
-        with:
-          publicKey:  ${{ secrets.ATLAS_PUBLIC_KEY }}
-          privateKey: ${{ secrets.ATLAS_PRIVATE_KEY }}
-          projectId:  ${{ secrets.ATLAS_PROJECT_ID }}
-          orgId:      ${{ secrets.ATLAS_ORG_ID }}
         
       - name: Use AtlasCLI
         shell: bash
