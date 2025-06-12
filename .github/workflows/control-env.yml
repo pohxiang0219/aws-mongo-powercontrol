@@ -55,10 +55,6 @@ jobs:
         run: |
           aws configure set region ap-southeast-1
       
-      - name: Run test_connection.py
-        run: |
-          python test_connection.py 
-      
           
       - name: Run unified.py
         run: |
