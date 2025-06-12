@@ -62,6 +62,31 @@ def wait_for_ecs_service(service_config):
     except Exception as e:
         return False, service_config['service'], str(e)
 
+def wait_for_rds_stop(db_id, max_attempts=15, delay=20):
+    """Wait for RDS instance to stop using describe_db_instances"""
+    print(f"Waiting for RDS instance '{db_id}' to stop...")
+    for attempt in range(max_attempts):
+        try:
+            response = rds_client.describe_db_instances(DBInstanceIdentifier=db_id)
+            status = response['DBInstances'][0]['DBInstanceStatus']
+            print(f"  -> RDS instance '{db_id}' status: {status}")
+            
+            if status == 'stopped':
+                return True
+            elif status in ['stopping']:
+                time.sleep(delay)
+                continue
+            else:
+                print(f"  -> Unexpected status '{status}' for RDS instance '{db_id}'")
+                return False
+                
+        except ClientError as e:
+            print(f"  -> Error checking RDS instance '{db_id}': {e}")
+            return False
+    
+    print(f"  -> Timeout waiting for RDS instance '{db_id}' to stop")
+    return False
+
 # --- Main Logic: Startup Sequence ---
 
 def startup_sequence():
@@ -194,15 +219,19 @@ def shutdown_sequence():
     print("\n--- Step 3: Stopping Databases (RDS & Atlas) ---")
     
     # Stop RDS Instances
-    rds_waiter = rds_client.get_waiter('db_instance_stopped')
     for db_id in RDS_INSTANCES:
         try:
             print(f"Stopping RDS instance '{db_id}'...")
             rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
-            print(f"Waiting for RDS instance '{db_id}' to stop...")
-            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 20, 'MaxAttempts': 15})  # 5 minutes max
-            print(f"Success: RDS instance '{db_id}' is stopped.")
-        except (ClientError, WaiterError) as e:
+            
+            # Use custom wait function instead of waiter
+            if wait_for_rds_stop(db_id):
+                print(f"Success: RDS instance '{db_id}' is stopped.")
+            else:
+                print(f"Error: RDS instance '{db_id}' failed to stop within timeout")
+                return False
+                
+        except ClientError as e:
             if "InvalidDBInstanceState" in str(e):
                 print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
             else:
