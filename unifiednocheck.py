@@ -78,10 +78,6 @@ def startup_sequence():
     try:
         print(f"Starting EC2 instances: {EC2_INSTANCES}...")
         ec2_client.start_instances(InstanceIds=EC2_INSTANCES)
-        ec2_waiter = ec2_client.get_waiter('instance_running')
-        print("Waiting for EC2 instances to enter 'running' state...")
-        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 10, 'MaxAttempts': 20})  # 200 seconds max
-        print("Success: All specified EC2 instances are running.")
     except (ClientError, WaiterError) as e:
         print(f"Error starting or waiting for EC2 instances: {e}")
         return False
@@ -102,8 +98,6 @@ def startup_sequence():
                 print(f"Error updating service '{service_name}': {error}")
                 return False
 
-    # Wait for all services to stabilize in parallel
-    print("Skipped Checking.")
 
             
     return True
@@ -127,9 +121,6 @@ def shutdown_sequence():
             else:
                 print(f"Error scaling down service '{service_name}': {error}")
                 return False
-
-    # Wait for all services to scale down in parallel
-    print("Skipped EC2 Checking")
 
 
     print("\n--- Phase 2: Stopping EC2 Bastion Host ---")
