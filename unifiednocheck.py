@@ -2,13 +2,9 @@ import sys
 import time
 import boto3
 import json
-from botocore.exceptions import ClientError, WaiterError
+from botocore.exceptions import ClientError
 import os
 import concurrent.futures
-
-# Configuration
-WAITER_TIMEOUT_SECONDS = 300  # Reduced from 900 to 300 seconds (5 minutes)
-CHECK_INTERVAL_SECONDS = 15   # Reduced from 30 to 15 seconds
 
 # Resource Definitions
 RDS_INSTANCES = [
@@ -39,7 +35,6 @@ ecs_client = session.client('ecs')
 def update_ecs_service(service_config, desired_count):
     """Update a single ECS service"""
     try:
-        print(f"Updating service '{service_config['service']}' in cluster '{service_config['cluster']}' to desired count {desired_count}...")
         ecs_client.update_service(
             cluster=service_config['cluster'],
             service=service_config['service'],
@@ -52,7 +47,7 @@ def update_ecs_service(service_config, desired_count):
 # --- Main Logic: Startup Sequence ---
 
 def startup_sequence():
-    """Starts all resources in the correct order and verifies each step."""
+    """Starts all resources - no waiting/checking."""
     print("\n--- Phase 1: Starting Databases (RDS & Atlas) ---")
     
     # Start RDS Instances
@@ -60,9 +55,10 @@ def startup_sequence():
         try:
             print(f"Starting RDS instance '{db_id}'...")
             rds_client.start_db_instance(DBInstanceIdentifier=db_id)
+            print(f"RDS start command sent for '{db_id}' (not waiting for completion)")
         except ClientError as e:
             if "InvalidDBInstanceState" in str(e):
-                print(f"  -> Note: RDS instance '{db_id}' is already running or not in a stoppable state.")
+                print(f"  -> Note: RDS instance '{db_id}' is already running.")
             else:
                 print(f"Error starting RDS instance '{db_id}': {e}")
                 return False
@@ -71,15 +67,15 @@ def startup_sequence():
     for cluster in ATLAS_CLUSTERS:
         print(f"Resuming Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters start {cluster}")
-
-    print("Atlas clusters started (not waiting for state verification)")
+        print(f"Atlas cluster '{cluster}' start command sent (not waiting for completion)")
 
     print("\n--- Phase 2: Starting EC2 Bastion Host ---")
     try:
         print(f"Starting EC2 instances: {EC2_INSTANCES}...")
         ec2_client.start_instances(InstanceIds=EC2_INSTANCES)
-    except (ClientError, WaiterError) as e:
-        print(f"Error starting or waiting for EC2 instances: {e}")
+        print("EC2 start command sent (not waiting for completion)")
+    except ClientError as e:
+        print(f"Error starting EC2 instances: {e}")
         return False
     
     print("\n--- Phase 3: Scaling Up ECS Services (Parallel) ---")
@@ -93,19 +89,17 @@ def startup_sequence():
         for future in concurrent.futures.as_completed(update_futures):
             success, service_name, error = future.result()
             if success:
-                print(f"Service update initiated: {service_name}")
+                print(f"Service scale-up command sent: {service_name}")
             else:
                 print(f"Error updating service '{service_name}': {error}")
                 return False
-
-
             
     return True
 
 # --- Main Logic: Shutdown Sequence ---
 
 def shutdown_sequence():
-    """Stops all resources in reverse order and verifies each step."""
+    """Stops all resources - no waiting/checking."""
     print("\n--- Phase 1: Scaling Down ECS Services (Parallel) ---")
     
     # Scale down all ECS services in parallel
@@ -117,37 +111,37 @@ def shutdown_sequence():
         for future in concurrent.futures.as_completed(update_futures):
             success, service_name, error = future.result()
             if success:
-                print(f"Service scale-down initiated: {service_name}")
+                print(f"Service scale-down command sent: {service_name}")
             else:
                 print(f"Error scaling down service '{service_name}': {error}")
                 return False
-
 
     print("\n--- Phase 2: Stopping EC2 Bastion Host ---")
     try:
         print(f"Stopping EC2 instances: {EC2_INSTANCES}...")
         ec2_client.stop_instances(InstanceIds=EC2_INSTANCES)
-        ec2_waiter = ec2_client.get_waiter('instance_stopped')
-        print("Waiting for EC2 instances to enter 'stopped' state...")
-        ec2_waiter.wait(InstanceIds=EC2_INSTANCES, WaiterConfig={'Delay': 10, 'MaxAttempts': 20})  # 200 seconds max
-        print("Success: All specified EC2 instances are stopped.")
-    except (ClientError, WaiterError) as e:
-        print(f"Error stopping or waiting for EC2 instances: {e}")
+        print("EC2 stop command sent (not waiting for completion)")
+    except ClientError as e:
+        print(f"Error stopping EC2 instances: {e}")
         return False
         
     print("\n--- Phase 3: Stopping Databases (RDS & Atlas) ---")
     
     # Stop RDS Instances
     for db_id in RDS_INSTANCES:
-        rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
-            
-            
+        try:
+            print(f"Stopping RDS instance '{db_id}'...")
+            rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
+            print(f"RDS stop command sent for '{db_id}' (not waiting for completion)")
+        except ClientError as e:
+            print(f"Error stopping RDS instance '{db_id}': {e}")
+            return False
 
     # Pause Atlas Clusters
     for cluster in ATLAS_CLUSTERS:
         print(f"Pausing Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters pause {cluster}")
-        print(f"Atlas cluster '{cluster}' pause command sent (not waiting for state verification)")
+        print(f"Atlas cluster '{cluster}' pause command sent (not waiting for completion)")
             
     return True
 
@@ -173,7 +167,7 @@ if __name__ == "__main__":
     print(f"Total execution time: {elapsed_time:.1f} seconds")
     
     if success:
-        print(f"Sequence '{action.upper()}' completed successfully!")
+        print(f"All '{action.upper()}' commands sent successfully!")
     else:
         print(f"Sequence '{action.upper()}' FAILED. Please review logs above.")
         sys.exit(1)
