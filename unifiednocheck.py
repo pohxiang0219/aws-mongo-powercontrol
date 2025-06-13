@@ -160,23 +160,9 @@ def shutdown_sequence():
     
     # Stop RDS Instances
     for db_id in RDS_INSTANCES:
-        try:
-            print(f"Stopping RDS instance '{db_id}'...")
-            rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
+        rds_client.stop_db_instance(DBInstanceIdentifier=db_id)
             
-            # Use custom wait function instead of waiter
-            if wait_for_rds_stop(db_id):
-                print(f"Success: RDS instance '{db_id}' is stopped.")
-            else:
-                print(f"Error: RDS instance '{db_id}' failed to stop within timeout")
-                return False
-                
-        except ClientError as e:
-            if "InvalidDBInstanceState" in str(e):
-                print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
-            else:   
-                print(f"Error stopping RDS instance '{db_id}': {e}")
-                return False
+            
 
     # Pause Atlas Clusters
     for cluster in ATLAS_CLUSTERS:
