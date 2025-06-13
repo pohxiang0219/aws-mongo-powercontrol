@@ -72,18 +72,6 @@ def startup_sequence():
         print(f"Resuming Atlas cluster '{cluster}'...")
         os.system(f"atlas clusters start {cluster}")
 
-    # Verify RDS Databases are available (with reduced timeout)
-    print("\n--- Verifying Database Availability ---")
-    rds_waiter = rds_client.get_waiter('db_instance_available')
-    for db_id in RDS_INSTANCES:
-        try:
-            print(f"Waiting for RDS instance '{db_id}' to become available...")
-            rds_waiter.wait(DBInstanceIdentifier=db_id, WaiterConfig={'Delay': 20, 'MaxAttempts': 15})  # 5 minutes max
-            print(f"Success: RDS instance '{db_id}' is available.")
-        except WaiterError as e:
-            print(f"Timeout or error waiting for RDS instance '{db_id}': {e}")
-            return False
-
     print("Atlas clusters started (not waiting for state verification)")
 
     print("\n--- Phase 2: Starting EC2 Bastion Host ---")
