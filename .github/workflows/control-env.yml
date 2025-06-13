@@ -54,8 +54,6 @@ jobs:
       - name: Run unified.py
         id: run_unified
         run: |
-          OUTPUT="$(python unified.py ${{ github.event.inputs.action }} 2>&1)"
-          curl -X POST https://<n8n-app-p68zu.ondigitalocean.app>/webhook/github-output \
-            -H "Content-Type: application/json" \
-            -d "$( jq -cn --arg out "$OUTPUT" '{ result: $out }' )"
+          python unified.py ${{ github.event.inputs.action }}
+        
 
