@@ -91,7 +91,7 @@ def wait_for_rds_stop(db_id, max_attempts=15, delay=20):
 
 def startup_sequence():
     """Starts all resources in the correct order and verifies each step."""
-    print("\n--- Step 1: Starting Databases (RDS & Atlas) ---")
+    print("\n--- Phase 1: Starting Databases (RDS & Atlas) ---")
     
     # Start RDS Instances
     for db_id in RDS_INSTANCES:
@@ -124,7 +124,7 @@ def startup_sequence():
 
     print("Atlas clusters started (not waiting for state verification)")
 
-    print("\n--- Step 2: Starting EC2 Bastion Host ---")
+    print("\n--- Phase 2: Starting EC2 Bastion Host ---")
     try:
         print(f"Starting EC2 instances: {EC2_INSTANCES}...")
         ec2_client.start_instances(InstanceIds=EC2_INSTANCES)
@@ -136,7 +136,7 @@ def startup_sequence():
         print(f"Error starting or waiting for EC2 instances: {e}")
         return False
     
-    print("\n--- Step 3: Scaling Up ECS Services (Parallel) ---")
+    print("\n--- Phase 3: Scaling Up ECS Services (Parallel) ---")
     
     # Start all ECS services in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
@@ -173,7 +173,7 @@ def startup_sequence():
 
 def shutdown_sequence():
     """Stops all resources in reverse order and verifies each step."""
-    print("\n--- Step 1: Scaling Down ECS Services (Parallel) ---")
+    print("\n--- Phase 1: Scaling Down ECS Services (Parallel) ---")
     
     # Scale down all ECS services in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
@@ -204,7 +204,7 @@ def shutdown_sequence():
                 print(f"Error waiting for service '{service_name}': {error}")
                 return False
 
-    print("\n--- Step 2: Stopping EC2 Bastion Host ---")
+    print("\n--- Phase 2: Stopping EC2 Bastion Host ---")
     try:
         print(f"Stopping EC2 instances: {EC2_INSTANCES}...")
         ec2_client.stop_instances(InstanceIds=EC2_INSTANCES)
@@ -216,7 +216,7 @@ def shutdown_sequence():
         print(f"Error stopping or waiting for EC2 instances: {e}")
         return False
         
-    print("\n--- Step 3: Stopping Databases (RDS & Atlas) ---")
+    print("\n--- Phase 3: Stopping Databases (RDS & Atlas) ---")
     
     # Stop RDS Instances
     for db_id in RDS_INSTANCES:
