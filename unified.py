@@ -62,7 +62,7 @@ def wait_for_ecs_service(service_config):
     except Exception as e:
         return False, service_config['service'], str(e)
 
-def wait_for_rds_stop(db_id, max_attempts=15, delay=20):
+def wait_for_rds_stop(db_id, max_attempts=15, delay=30):
     """Wait for RDS instance to stop using describe_db_instances"""
     print(f"Waiting for RDS instance '{db_id}' to stop...")
     for attempt in range(max_attempts):
@@ -234,7 +234,7 @@ def shutdown_sequence():
         except ClientError as e:
             if "InvalidDBInstanceState" in str(e):
                 print(f"  -> Note: RDS instance '{db_id}' was already stopped or not in a running state.")
-            else:
+            else:   
                 print(f"Error stopping RDS instance '{db_id}': {e}")
                 return False
 
