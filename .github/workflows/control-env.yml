@@ -51,9 +51,9 @@ jobs:
           aws configure set region ap-southeast-1
       
           
-      - name: Run unified.py
+      - name: Run unifiednocheck.py
         id: run_unified
         run: |
-          python unified.py ${{ github.event.inputs.action }}
+          python unifiednocheck.py ${{ github.event.inputs.action }}
         
 
